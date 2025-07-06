@@ -1,8 +1,15 @@
 const express = require("express");
 const axios = require("axios");
+const graphite = require('graphite');
+const client = graphite.createClient('plaintext://localhost:2003/');
+const StatsD = require('node-statsd');
+const statsd = new StatsD({
+  host: 'graphite',
+  port: 8125
+});
 
 const app = express();
-const PORT = 3000;
+const PORT = 4000;
 
 // URLs to monitor
 const urls = [
@@ -60,9 +67,30 @@ if (process.env.NODE_ENV !== "test") {
 }
 
 // Routes
-app.get("/status", (req, res) => {
-  res.json(Object.entries(statusMap).map(([url, info]) => ({ url, ...info })));
+app.get('/status', async (req, res) => {
+  const start = Date.now();
+
+  // Simulate or perform some real checks (e.g., DB ping, CPU load, etc.)
+  try {
+    // If you want, add logic here to check real services.
+
+    const responseTime = Date.now() - start;
+
+    // Send real metrics
+    statsd.timing('uptime_monitor.response_time', responseTime);  // ms latency
+    statsd.increment('uptime_monitor.status_requests');           // count hits
+
+    res.json({
+      status: 'ok',
+      timestamp: new Date().toISOString(),
+      responseTime: `${responseTime}ms`,
+    });
+  } catch (error) {
+    statsd.increment('uptime_monitor.errors');  // track errors
+    res.status(500).json({ status: 'error', error: error.message });
+  }
 });
+
 
 app.get("/logs", (req, res) => {
   res.json(logData.slice(-50)); // return last 50 logs
